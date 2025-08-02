@@ -13,7 +13,9 @@ Camera::Camera(float fov)
     , up(0, 1, 0)
     , yaw(-90)
     , pitch(0)
-    , fov(fov) {}
+    , fov(fov) {
+	updateVectors();
+}
 
 void Camera::updateLook(double x_offset, double y_offset) {
 	x_offset *= sensitivity;

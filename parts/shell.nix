@@ -5,7 +5,7 @@ _: {
     ...
   }: {
     devShells = {
-      default = pkgs.mkShell.override {stdenv = pkgs.llvmPackages_21.stdenv;} rec {
+      default = pkgs.mkShell.override {inherit (pkgs.llvmPackages_21) stdenv;} rec {
         name = "shell";
         nativeBuildInputs = with pkgs; [
           cmake
@@ -24,6 +24,8 @@ _: {
           libGL
           libGLU
           glm
+          imgui
+          assimp
         ];
 
         LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;

@@ -13,13 +13,6 @@ InputManager::InputManager(GLFWwindow* window)
 };
 
 void InputManager::input(const int& key, const int& scancode, const int& action) {
-	const char* keyName = glfwGetKeyName(key, scancode);
-	if (keyName != nullptr) {
-		std::println("[KEY_EVENT]: {} {}", keyName, action ? "PRESS" : "RELEASE");
-	} else {
-		std::println("[KEY_EVENT]: {} {}", key, action ? "PRESS" : "RELEASE");
-	}
-
 	auto elem = key_state.find(key);
 	if (elem == key_state.end()) {
 		key_state.emplace(key, action == GLFW_PRESS);
@@ -94,4 +87,7 @@ void InputManager::reset_last_mouse_pos(GLFWwindow* window) {
 
 void InputManager::add_mouse_offset_callback(std::function<void(double, double)> cb) {
 	mouse_offset_callbacks.push_back(std::move(cb));
+};
+void InputManager::add_mouse_pos_callback(std::function<void(double, double)> cb) {
+	mouse_pos_callbacks.push_back(std::move(cb));
 };

@@ -5,6 +5,8 @@
 #include <utility>
 #include <expected>
 #include <filesystem>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <print>
 
@@ -93,14 +95,39 @@ void Shader::setMat4(const char* name, float* v) const {
 
 	glUniformMatrix4fv(location, 1, GL_FALSE, v);
 }
+void Shader::setMat4(const char* name, const glm::mat4& v) const {
+	auto location = glGetUniformLocation(id, name);
+
+	glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(v));
+}
+
+void Shader::setMat3(const char* name, float* v) const {
+	auto location = glGetUniformLocation(id, name);
+
+	glUniformMatrix3fv(location, 1, GL_FALSE, v);
+}
+void Shader::setMat3(const char* name, const glm::mat3& v) const {
+	auto location = glGetUniformLocation(id, name);
+
+	glUniformMatrix3fv(location, 1, GL_FALSE, glm::value_ptr(v));
+}
 
 void Shader::use() { glUseProgram(id); }
 
+void Shader::setVec3(const char* name, float v1, float v2, float v3) const {
+	auto location = glGetUniformLocation(id, name);
+	glUniform3f(location, v1, v2, v3);
+}
+
+void Shader::setVec3(const char* name, const glm::vec3& v) const {
+	auto location = glGetUniformLocation(id, name);
+	glUniform3f(location, v.x, v.y, v.z);
+}
 std::expected<void, std::string> Shader::checkCompileErrors(GLuint id, std::string type) {
 	char buff[1024];
 	int sucess;
 	if (type == "Program") {
-		glGetProgramiv(id, GL_COMPILE_STATUS, &sucess);
+		glGetProgramiv(id, GL_LINK_STATUS, &sucess);
 		if (sucess) return {};
 
 		glGetProgramInfoLog(id, sizeof(buff), NULL, buff);

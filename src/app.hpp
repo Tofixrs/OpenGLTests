@@ -9,6 +9,7 @@ class App {
 public:
 	static std::expected<App, std::string> create();
 	InputManager input_manager;
+	App(App&& other) noexcept;
 	void run();
 
 private:

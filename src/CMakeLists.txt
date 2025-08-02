@@ -10,10 +10,14 @@ set_target_properties(app PROPERTIES
 
 find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(imgui REQUIRED)
+find_package(assimp REQUIRED)
 target_link_libraries(app glfw)
 target_link_libraries(app OpenGL)
 target_link_libraries(app glad)
 target_link_libraries(app glm)
 target_link_libraries(app stb)
+target_link_libraries(app imgui)
+target_link_libraries(app assimp)
 target_include_directories(app PUBLIC ./include)
 

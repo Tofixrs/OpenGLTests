@@ -3,12 +3,23 @@
 #include "app.hpp"
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/matrix.hpp>
+#include <glm/trigonometric.hpp>
 #include <print>
+#include "input_manager.hpp"
 #include "shader.hpp"
 #include "errorReporting.hpp"
 #include <stb/image.h>
 #include "camera.hpp"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include <model.hpp>
 
 std::expected<App, std::string> App::create() {
 	auto gl_res = App::init_gl();
@@ -23,12 +34,6 @@ std::expected<App, std::string> App::create() {
 	input_manager.bind("up", {GLFW_KEY_SPACE});
 	input_manager.bind("down", {GLFW_KEY_LEFT_SHIFT});
 	input_manager.bind("toggle_mouse", {GLFW_KEY_ESCAPE});
-
-	return App(window, std::move(input_manager));
-};
-
-void App::run() {
-	glfwSetWindowUserPointer(window, this);
 	glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
 		auto app = (App*) glfwGetWindowUserPointer(window);
 		app->input_manager.input(key, scancode, action);
@@ -37,6 +42,23 @@ void App::run() {
 		auto app = (App*) glfwGetWindowUserPointer(window);
 		app->input_manager.mouse_input(window, x, y);
 	});
+
+	return App(window, std::move(input_manager));
+};
+
+void App::run() {
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+
+	auto& io = ImGui::GetIO();
+
+	// Setup Polatform/Renderer backends
+	ImGui_ImplGlfw_InitForOpenGL(
+	    window,
+	    true
+	); // Second param install_callback=true will install GLFW callbacks and chain to existing ones.
+	ImGui_ImplOpenGL3_Init();
+
 	auto res = Shader::create("./shaders/vert.glsl", "./shaders/frag.glsl");
 	if (!res.has_value()) {
 		//cant print the std::string* directly lol
@@ -45,134 +67,23 @@ void App::run() {
 	}
 	auto shader = std::move(*res);
 
-	// clang-format off
-    float vertices[] = {
-      // Front face
-      -0.5f, -0.5f,  0.5f,  0.0f, 0.0f, // Bottom-left
-       0.5f, -0.5f,  0.5f,  1.0f, 0.0f, // Bottom-right
-       0.5f,  0.5f,  0.5f,  1.0f, 1.0f, // Top-right
-      -0.5f,  0.5f,  0.5f,  0.0f, 1.0f, // Top-left
-
-      // Back face
-      -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, // Bottom-left
-       0.5f, -0.5f, -0.5f,  0.0f, 0.0f, // Bottom-right
-       0.5f,  0.5f, -0.5f,  0.0f, 1.0f, // Top-right
-      -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, // Top-left
-
-      // Left face
-      -0.5f,  0.5f,  0.5f,  0.0f, 1.0f, // Top-right
-      -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, // Top-left
-      -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, // Bottom-left
-      -0.5f, -0.5f,  0.5f,  0.0f, 0.0f, // Bottom-right
-
-      // Right face
-       0.5f,  0.5f,  0.5f,  1.0f, 1.0f, // Top-left
-       0.5f, -0.5f,  0.5f,  1.0f, 0.0f, // Bottom-left
-       0.5f, -0.5f, -0.5f,  0.0f, 0.0f, // Bottom-right
-       0.5f,  0.5f, -0.5f,  0.0f, 1.0f, // Top-right
-
-      // Top face
-      -0.5f,  0.5f,  0.5f,  0.0f, 0.0f, // Bottom-left
-       0.5f,  0.5f,  0.5f,  1.0f, 0.0f, // Bottom-right
-       0.5f,  0.5f, -0.5f,  1.0f, 1.0f, // Top-right
-      -0.5f,  0.5f, -0.5f,  0.0f, 1.0f, // Top-left
-
-      // Bottom face
-      -0.5f, -0.5f,  0.5f,  0.0f, 1.0f, // Top-left
-       0.5f, -0.5f,  0.5f,  1.0f, 1.0f, // Top-right
-       0.5f, -0.5f, -0.5f,  1.0f, 0.0f, // Bottom-right
-      -0.5f, -0.5f, -0.5f,  0.0f, 0.0f  // Bottom-left
-  };
-
-  GLuint indicies[] = {
-      // Front face
-      0, 1, 2,  // First triangle
-      2, 3, 0,  // Second triangle
-
-      // Back face
-      4, 5, 6,
-      6, 7, 4,
-
-      // Left face
-      8, 9, 10,
-      10, 11, 8,
-
-      // Right face
-      12, 13, 14,
-      14, 15, 12,
-
-      // Top face
-      16, 17, 18,
-      18, 19, 16,
-
-      // Bottom face
-      20, 21, 22,
-      22, 23, 20
-  };
-	// clang-format on
-
-	unsigned int VBO, VAO, EBO;
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
-	// bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
-	glBindVertexArray(VAO);
-
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indicies), indicies, GL_STATIC_DRAW);
-
-	// position attribute
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*) 0);
-	glEnableVertexAttribArray(0);
-
-	//tex cord
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*) (3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-
-	GLuint texture;
-	glGenTextures(1, &texture);
-	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	stbi_set_flip_vertically_on_load(true);
-	int width, height, channels;
-	auto image_data = stbi_load("./textures/sans.png", &width, &height, &channels, 0);
-	GLenum format = GL_RGB;
-	if (channels == 4) {
-		format = GL_RGBA;
+	auto res_no_shade = Shader::create("./shaders/no_shade_v.glsl", "./shaders/no_shade_f.glsl");
+	if (!res_no_shade.has_value()) {
+		//cant print the std::string* directly lol
+		std::println("{}", res_no_shade.error().c_str());
+		return;
 	}
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, format, GL_UNSIGNED_BYTE, image_data);
-	glGenerateMipmap(GL_TEXTURE_2D);
-	stbi_image_free(image_data);
+	auto shader_no_shade = std::move(*res_no_shade);
 
-	GLuint awesomeTexture;
-	glGenTextures(1, &awesomeTexture);
-	glBindTexture(GL_TEXTURE_2D, awesomeTexture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	auto lightPos = glm::vec3(0.f, 10.f, 0.f);
 
-	image_data = stbi_load("./textures/brick.jpg", &width, &height, &channels, 0);
-	format = GL_RGB;
-	if (channels == 4) {
-		format = GL_RGBA;
-	}
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, format, GL_UNSIGNED_BYTE, image_data);
-	glGenerateMipmap(GL_TEXTURE_2D);
-	stbi_image_free(image_data);
-
-	glBindVertexArray(0);
-
+	auto lightColor = glm::vec3(1.f, 1.f, 1.f);
 	shader.use();
 	shader.setInt("texture1", 0);
 	shader.setInt("texture2", 1);
+	shader.setFloat("ambientStrength", 0.3);
+	shader.setVec3("lightColor", lightColor);
+	shader.setVec3("lightPos", lightPos);
 
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	double lastLoopTime = glfwGetTime();
@@ -182,10 +93,34 @@ void App::run() {
 		cam.updateLook(x_offset, y_offset);
 	});
 
+	auto model_res = Model::create("./models/teapot.glb");
+	if (!model_res) {
+		std::println("{}", model_res.error().c_str());
+		return;
+	}
+	auto model = std::move(*model_res);
+
 	while (!glfwWindowShouldClose(window)) {
 		double currentFrame = glfwGetTime();
 		double deltaTime = currentFrame - lastLoopTime;
 		lastLoopTime = currentFrame;
+		ImGuiIO& io = ImGui::GetIO();
+		if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
+			io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+			io.ConfigFlags |= ImGuiConfigFlags_NoKeyboard;
+		} else {
+			io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+			io.ConfigFlags &= ~ImGuiConfigFlags_NoKeyboard;
+		}
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+		ImGui::Begin("Debug");
+		ImGui::Text("Debug Window");
+		ImGui::Text("FPS: %f", 1 / deltaTime);
+		ImGui::ColorEdit3("Light color", glm::value_ptr(lightColor));
+		ImGui::End();
+
 		cam.update(*this, deltaTime);
 
 		if (input_manager.clicked("toggle_mouse")) {
@@ -201,20 +136,8 @@ void App::run() {
 		}
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, texture);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, awesomeTexture);
 		shader.use();
 
-		auto model = glm::mat4(1.0f);
-		model = glm::rotate(model, glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		model = glm::rotate(
-		    model,
-		    (float) (glfwGetTime() * glm::radians(100.f)),
-		    glm::vec3(0.5f, 1.0f, 0.0f)
-		);
 		glm::mat4 view;
 		view = glm::lookAt(cam.pos, cam.pos + cam.front, cam.up);
 		int screen_width, screen_height;
@@ -222,19 +145,35 @@ void App::run() {
 		glfwGetWindowSize(window, &screen_width, &screen_height);
 		auto projection =
 		    glm::perspective(cam.fov, ((float) screen_width / (float) screen_height), 0.1f, 100.f);
+		glm::mat4 model_matrix = glm::mat4(1.0f);
+		model_matrix = glm::translate(model_matrix, glm::vec3(0.0f, 0.0f, 0.0f));
+		model_matrix = glm::rotate(
+		    model_matrix,
+		    (float) glm::radians(glfwGetTime() * 100.f),
+		    glm::vec3(0.0f, 1.0f, 0.0f)
+		);
 		shader.setMat4("projection", glm::value_ptr(projection));
-		shader.setMat4("model", glm::value_ptr(model));
 		shader.setMat4("view", glm::value_ptr(view));
-		glBindVertexArray(VAO);
-		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+		shader.setMat4("model", glm::value_ptr(model_matrix));
+		shader.setMat3("normalMatrix", glm::transpose(glm::inverse(glm::mat3(model_matrix))));
+		shader.setVec3("lightColor", lightColor);
+		shader.setVec3("viewPos", cam.pos);
+		model.draw(shader);
+
+		shader_no_shade.use();
+		shader_no_shade.setMat4("projection", glm::value_ptr(projection));
+		shader_no_shade.setMat4("view", glm::value_ptr(view));
+		shader_no_shade.setMat4("model", model_matrix);
+
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
-	glDeleteTextures(1, &texture);
-	glDeleteVertexArrays(1, &VAO);
-	glDeleteBuffers(1, &VBO);
-	glDeleteBuffers(1, &EBO);
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 	shader.~Shader();
 
 	glfwTerminate();
@@ -243,6 +182,12 @@ void App::run() {
 App::App(GLFWwindow* window, InputManager input_manager)
     : window(window)
     , input_manager(std::move(input_manager)) {};
+
+App::App(App&& other) noexcept
+    : window(other.window)
+    , input_manager(std::move(other.input_manager)) {
+	glfwSetWindowUserPointer(window, this);
+};
 
 std::expected<GLFWwindow*, std::string> App::init_gl() {
 	glfwSetErrorCallback([](int errorCode, const char* desc) {
