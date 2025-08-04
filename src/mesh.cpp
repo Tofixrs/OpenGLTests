@@ -65,12 +65,12 @@ void Mesh::draw(const Shader& shader) const {
 			number = spec_num++;
 		}
 
-		std::string uniform_name = std::format("{}[{}]", name, number);
+		std::string uniform_name = std::format("material.{}[{}]", name, number);
 		shader.setInt(uniform_name.c_str(), i);
 		glBindTexture(GL_TEXTURE_2D, textures[i].id);
 	}
-	shader.setInt("diff_txt_number", diff_num);
-	shader.setInt("specular_txt_number", spec_num);
+	shader.setInt("material.diff_number", diff_num);
+	shader.setInt("material.spec_number", spec_num);
 	glActiveTexture(GL_TEXTURE0);
 
 	glBindVertexArray(VAO);

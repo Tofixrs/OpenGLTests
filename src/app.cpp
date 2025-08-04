@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include "app.hpp"
 #include <cstdint>
+#include <ctime>
 #include <string>
 #include <utility>
 #include <glm/ext/matrix_float3x3.hpp>
@@ -75,16 +76,6 @@ void App::run() {
 	}
 	auto shader_no_shade = std::move(*res_no_shade);
 
-	auto lightPos = glm::vec3(0.f, 10.f, 0.f);
-
-	auto lightColor = glm::vec3(1.f, 1.f, 1.f);
-	shader.use();
-	shader.setInt("texture1", 0);
-	shader.setInt("texture2", 1);
-	shader.setFloat("ambientStrength", 0.3);
-	shader.setVec3("lightColor", lightColor);
-	shader.setVec3("lightPos", lightPos);
-
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	double lastLoopTime = glfwGetTime();
 
@@ -99,6 +90,27 @@ void App::run() {
 		return;
 	}
 	auto model = std::move(*model_res);
+
+	auto cube_model_res = Model::create("./models/cube.glb");
+	if (!cube_model_res) {
+		std::println("{}", cube_model_res.error().c_str());
+		return;
+	}
+	auto cube_model = std::move(*cube_model_res);
+
+	auto tenna_model_res = Model::create("./models/tenna_deltarune.glb");
+	if (!tenna_model_res) {
+		std::println("{}", tenna_model_res.error().c_str());
+		return;
+	}
+	auto tenna_model = std::move(*tenna_model_res);
+
+	auto material_shininess = 32.f;
+
+	auto light_pos = glm::vec3(0.f, 10.f, 0.f);
+	auto light_diffuse = glm::vec3(1.f, 1.f, 1.f);
+	auto light_ambient = glm::vec3(0.5f, 0.5f, 0.5f);
+	auto light_specular = glm::vec3(1.0f, 1.0f, 1.0f);
 
 	while (!glfwWindowShouldClose(window)) {
 		double currentFrame = glfwGetTime();
@@ -118,7 +130,17 @@ void App::run() {
 		ImGui::Begin("Debug");
 		ImGui::Text("Debug Window");
 		ImGui::Text("FPS: %f", 1 / deltaTime);
-		ImGui::ColorEdit3("Light color", glm::value_ptr(lightColor));
+		ImGui::Text("material");
+		ImGui::PushID("material");
+		ImGui::DragFloat("shininess", &material_shininess);
+		ImGui::PopID();
+		ImGui::Text("Light");
+		ImGui::PushID("light");
+		ImGui::DragFloat3("position", glm::value_ptr(light_pos));
+		ImGui::ColorEdit3("ambient", glm::value_ptr(light_ambient));
+		ImGui::ColorEdit3("specular", glm::value_ptr(light_specular));
+		ImGui::ColorEdit3("diffuse", glm::value_ptr(light_diffuse));
+		ImGui::PopID();
 		ImGui::End();
 
 		cam.update(*this, deltaTime);
@@ -156,14 +178,23 @@ void App::run() {
 		shader.setMat4("view", glm::value_ptr(view));
 		shader.setMat4("model", glm::value_ptr(model_matrix));
 		shader.setMat3("normalMatrix", glm::transpose(glm::inverse(glm::mat3(model_matrix))));
-		shader.setVec3("lightColor", lightColor);
+		shader.setVec3("lightColor", light_diffuse);
 		shader.setVec3("viewPos", cam.pos);
-		model.draw(shader);
+		shader.setFloat("material.shininess", material_shininess);
+		shader.setVec3("light.pos", light_pos);
+		shader.setVec3("light.ambient", light_ambient);
+		shader.setVec3("light.diffuse", light_diffuse);
+		shader.setVec3("light.specular", light_specular);
+		tenna_model.draw(shader);
 
+		auto light_model = glm::mat4(1.f);
+		light_model = glm::translate(light_model, light_pos);
 		shader_no_shade.use();
 		shader_no_shade.setMat4("projection", glm::value_ptr(projection));
 		shader_no_shade.setMat4("view", glm::value_ptr(view));
-		shader_no_shade.setMat4("model", model_matrix);
+		shader_no_shade.setMat4("model", light_model);
+		shader_no_shade.setVec3("lightColor", light_diffuse);
+		cube_model.draw(shader_no_shade);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
