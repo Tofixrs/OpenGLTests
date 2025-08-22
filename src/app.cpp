@@ -1,3 +1,4 @@
+#include <format>
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 #include "app.hpp"
@@ -5,6 +6,7 @@
 #include <ctime>
 #include <string>
 #include <utility>
+#include <vector>
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/vector_float3.hpp>
@@ -21,6 +23,8 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <model.hpp>
+#include "point_light.hpp"
+#include "dir_light.hpp"
 
 std::expected<App, std::string> App::create() {
 	auto gl_res = App::init_gl();
@@ -107,10 +111,20 @@ void App::run() {
 
 	auto material_shininess = 32.f;
 
-	auto light_pos = glm::vec3(0.f, 10.f, 0.f);
-	auto light_diffuse = glm::vec3(1.f, 1.f, 1.f);
-	auto light_ambient = glm::vec3(0.5f, 0.5f, 0.5f);
-	auto light_specular = glm::vec3(1.0f, 1.0f, 1.0f);
+	std::vector<PointLight> point_lights = {PointLight {
+	    .pos = glm::vec3(0.f, 10.f, 0.f),
+	    .ambient = glm::vec3(0.5f, 0.5f, 0.5f),
+	    .diffuse = glm::vec3(1.f, 1.f, 1.f),
+	    .specular = glm::vec3(1.0f, 1.0f, 1.0f),
+	    .constant = 1.0f,
+	    .linear = 0.09f,
+	    .quadratic = 0.032f
+	}};
+	DirLight dir_light = {
+	    .direction = glm::vec3(-0.2f, -1.0f, -0.3f),
+	    .ambient = glm::vec3(0.05f, 0.05f, 0.05f),
+	    .diffuse = glm::vec3(0.04f, 0.0f, 0.4f),
+	};
 
 	while (!glfwWindowShouldClose(window)) {
 		double currentFrame = glfwGetTime();
@@ -135,12 +149,30 @@ void App::run() {
 		ImGui::DragFloat("shininess", &material_shininess);
 		ImGui::PopID();
 		ImGui::Text("Light");
-		ImGui::PushID("light");
-		ImGui::DragFloat3("position", glm::value_ptr(light_pos));
-		ImGui::ColorEdit3("ambient", glm::value_ptr(light_ambient));
-		ImGui::ColorEdit3("specular", glm::value_ptr(light_specular));
-		ImGui::ColorEdit3("diffuse", glm::value_ptr(light_diffuse));
-		ImGui::PopID();
+		if (ImGui::Button("Add")) {
+			point_lights.push_back(PointLight {
+			    .pos = glm::vec3(0.f, 10.f, 0.f),
+			    .ambient = glm::vec3(0.5f, 0.5f, 0.5f),
+			    .diffuse = glm::vec3(1.f, 1.f, 1.f),
+			    .specular = glm::vec3(1.0f, 1.0f, 1.0f),
+			    .constant = 1.0f,
+			    .linear = 0.09f,
+			    .quadratic = 0.032f
+			});
+		}
+		for (size_t i = 0; i < point_lights.size(); ++i) {
+			auto& light = point_lights[i];
+			ImGui::PushID(std::format("light{}", i).c_str());
+			ImGui::DragFloat3("position", glm::value_ptr(light.pos));
+			ImGui::ColorEdit3("ambient", glm::value_ptr(light.ambient));
+			ImGui::ColorEdit3("specular", glm::value_ptr(light.specular));
+			ImGui::ColorEdit3("diffuse", glm::value_ptr(light.diffuse));
+			ImGui::DragFloat("constant", &light.constant);
+			ImGui::DragFloat("linear", &light.linear);
+			ImGui::DragFloat("quadratic", &light.quadratic);
+			ImGui::Separator();
+			ImGui::PopID();
+		}
 		ImGui::End();
 
 		cam.update(*this, deltaTime);
@@ -178,23 +210,25 @@ void App::run() {
 		shader.setMat4("view", glm::value_ptr(view));
 		shader.setMat4("model", glm::value_ptr(model_matrix));
 		shader.setMat3("normalMatrix", glm::transpose(glm::inverse(glm::mat3(model_matrix))));
-		shader.setVec3("lightColor", light_diffuse);
 		shader.setVec3("viewPos", cam.pos);
 		shader.setFloat("material.shininess", material_shininess);
-		shader.setVec3("light.pos", light_pos);
-		shader.setVec3("light.ambient", light_ambient);
-		shader.setVec3("light.diffuse", light_diffuse);
-		shader.setVec3("light.specular", light_specular);
+		dir_light.set_shader_data(shader);
+		shader.setInt("point_light_num", point_lights.size());
+		for (size_t i = 0; i < point_lights.size(); i++) {
+			point_lights[i].set_shader_data(i, shader);
+		}
 		tenna_model.draw(shader);
 
-		auto light_model = glm::mat4(1.f);
-		light_model = glm::translate(light_model, light_pos);
-		shader_no_shade.use();
-		shader_no_shade.setMat4("projection", glm::value_ptr(projection));
-		shader_no_shade.setMat4("view", glm::value_ptr(view));
-		shader_no_shade.setMat4("model", light_model);
-		shader_no_shade.setVec3("lightColor", light_diffuse);
-		cube_model.draw(shader_no_shade);
+		for (const auto& light: point_lights) {
+			auto light_model = glm::mat4(1.f);
+			light_model = glm::translate(light_model, light.pos);
+			shader_no_shade.use();
+			shader_no_shade.setMat4("projection", glm::value_ptr(projection));
+			shader_no_shade.setMat4("view", glm::value_ptr(view));
+			shader_no_shade.setMat4("model", light_model);
+			shader_no_shade.setVec3("lightColor", light.diffuse);
+			cube_model.draw(shader_no_shade);
+		}
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
